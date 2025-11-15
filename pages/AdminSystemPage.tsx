@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Button from '../components/Button';
 import { useSettings } from '../context/SettingsContext';
 import ToggleSwitch from '../components/ToggleSwitch';
+import * as api from '../services/api';
 
 const WarningIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -21,28 +22,24 @@ const AdminSystemPage: React.FC = () => {
     const [userFileName, setUserFileName] = useState<string>('');
     const [isUserRestoring, setIsUserRestoring] = useState(false);
 
-    const USER_DATA_KEYS_REGEX = /^(karma_users|karma_coins_|contribution_value_|impact_score_|transactions_|social_ids_|userIdentifier)/;
+    const downloadFile = (content: string, fileName: string) => {
+        const blob = new Blob([content], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     // --- FULL BACKUP/RESTORE LOGIC ---
-    const handleFullBackup = () => {
+    const handleFullBackup = async () => {
         try {
-            const backupData: { [key: string]: string | null } = {};
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key) {
-                    backupData[key] = localStorage.getItem(key);
-                }
-            }
-            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            const backupJson = await api.backupAllData();
             const date = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `karma-full-backup-${date}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadFile(backupJson, `karma-full-backup-${date}.json`);
             alert('فایل پشتیبان کامل با موفقیت ایجاد شد.');
         } catch (error) {
             console.error("Error creating full backup:", error);
@@ -65,7 +62,7 @@ const AdminSystemPage: React.FC = () => {
         }
     };
 
-    const handleFullRestore = () => {
+    const handleFullRestore = async () => {
         if (!fullRestoreFileContent) {
             alert('لطفا ابتدا یک فایل پشتیبان کامل را انتخاب کنید.');
             return;
@@ -78,11 +75,7 @@ const AdminSystemPage: React.FC = () => {
         if (isConfirmed) {
             setIsFullRestoring(true);
             try {
-                const dataToRestore = JSON.parse(fullRestoreFileContent);
-                localStorage.clear();
-                Object.keys(dataToRestore).forEach(key => {
-                    localStorage.setItem(key, dataToRestore[key]);
-                });
+                await api.restoreAllData(fullRestoreFileContent);
                 alert('اطلاعات با موفقیت بازیابی شد. برنامه مجدداً بارگذاری می‌شود.');
                 window.location.reload();
             } catch (error) {
@@ -94,25 +87,11 @@ const AdminSystemPage: React.FC = () => {
     };
 
     // --- USER-ONLY BACKUP/RESTORE LOGIC ---
-    const handleUserBackup = () => {
+    const handleUserBackup = async () => {
         try {
-            const backupData: { [key: string]: string | null } = {};
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && USER_DATA_KEYS_REGEX.test(key)) {
-                    backupData[key] = localStorage.getItem(key);
-                }
-            }
-            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            const backupJson = await api.backupUserData();
             const date = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `karma-users-backup-${date}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadFile(backupJson, `karma-users-backup-${date}.json`);
             alert('فایل پشتیبان کاربران با موفقیت ایجاد شد.');
         } catch (error) {
             console.error("Error creating user backup:", error);
@@ -135,7 +114,7 @@ const AdminSystemPage: React.FC = () => {
         }
     };
 
-    const handleUserRestore = () => {
+    const handleUserRestore = async () => {
         if (!userRestoreFileContent) {
             alert('لطفا ابتدا یک فایل پشتیبان کاربران را انتخاب کنید.');
             return;
@@ -148,23 +127,7 @@ const AdminSystemPage: React.FC = () => {
         if (isConfirmed) {
             setIsUserRestoring(true);
             try {
-                const dataToRestore = JSON.parse(userRestoreFileContent);
-                // First, remove existing user data to prevent conflicts
-                const keysToRemove: string[] = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key && USER_DATA_KEYS_REGEX.test(key)) {
-                        keysToRemove.push(key);
-                    }
-                }
-                keysToRemove.forEach(key => localStorage.removeItem(key));
-                
-                // Now, add the new user data
-                Object.keys(dataToRestore).forEach(key => {
-                    if (USER_DATA_KEYS_REGEX.test(key)) {
-                        localStorage.setItem(key, dataToRestore[key]);
-                    }
-                });
+                await api.restoreUserData(userRestoreFileContent);
                 alert('اطلاعات کاربران با موفقیت بازیابی شد. برنامه مجدداً بارگذاری می‌شود.');
                 window.location.reload();
             } catch (error) {
@@ -209,7 +172,7 @@ const AdminSystemPage: React.FC = () => {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Backup */}
-                    <div className="md:border-r md:pr-8">
+                    <div className="md:border-l md:pl-8">
                         <h3 className="font-semibold mb-3">ایجاد پشتیبان کاربران</h3>
                         <Button onClick={handleUserBackup}>
                             دانلود پشتیبان کاربران
@@ -261,7 +224,7 @@ const AdminSystemPage: React.FC = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                      {/* Backup */}
-                    <div className="md:border-r md:pr-8">
+                    <div className="md:border-l md:pl-8">
                         <h3 className="font-semibold mb-3">ایجاد پشتیبان کامل</h3>
                         <Button onClick={handleFullBackup}>
                             دانلود پشتیبان کامل

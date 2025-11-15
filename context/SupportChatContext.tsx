@@ -1,5 +1,6 @@
 import React, { createContext, useState, ReactNode, useEffect, useContext } from 'react';
 import type { SupportChatMessage } from '../types';
+import * as api from '../services/api';
 
 interface SupportChatContextType {
   chats: Record<string, SupportChatMessage[]>;
@@ -15,23 +16,16 @@ export const SupportChatProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [chats, setChats] = useState<Record<string, SupportChatMessage[]>>({});
 
   useEffect(() => {
-    try {
-      const savedChats = localStorage.getItem('karma_support_chats');
-      if (savedChats) {
-        setChats(JSON.parse(savedChats));
-      }
-    } catch (error) {
+    api.fetchChats().then(savedChats => {
+      setChats(savedChats);
+    }).catch(error => {
       console.error("Failed to load support chats:", error);
-    }
+    });
   }, []);
 
   const saveChats = (updatedChats: Record<string, SupportChatMessage[]>) => {
-    try {
-      localStorage.setItem('karma_support_chats', JSON.stringify(updatedChats));
-      setChats(updatedChats);
-    } catch (error) {
-      console.error("Failed to save support chats:", error);
-    }
+    api.saveChats(updatedChats);
+    setChats(updatedChats);
   };
 
   const initializeChat = (userId: string) => {

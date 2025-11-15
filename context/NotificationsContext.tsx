@@ -2,6 +2,7 @@ import React, { createContext, useState, ReactNode, useContext, useEffect } from
 import { NEWS_DATA } from '../data/notifications';
 import type { NewsArticle } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import * as api from '../services/api';
 
 export interface Notification {
   id: string;
@@ -33,19 +34,16 @@ export const NotificationsProvider: React.FC<{ children: ReactNode }> = ({ child
   const [newsArticles] = useState<NewsArticle[]>(NEWS_DATA);
 
   useEffect(() => {
-    try {
-      const savedNotifications = localStorage.getItem('karma_notifications');
-      if (savedNotifications) {
-        setNotifications(JSON.parse(savedNotifications));
-      }
-    } catch (error) {
-      console.error("Failed to load notifications:", error);
-    }
+    api.fetchNotifications().then(savedNotifications => {
+        setNotifications(savedNotifications);
+    }).catch(error => {
+        console.error("Failed to load notifications:", error);
+    });
   }, []);
 
   const saveNotifications = (updatedNotifications: Notification[]) => {
     setNotifications(updatedNotifications);
-    localStorage.setItem('karma_notifications', JSON.stringify(updatedNotifications));
+    api.saveNotifications(updatedNotifications);
   };
   
   const addAnnouncement = (type: 'news' | 'karmaClub', message: string, videoUrl?: string) => {
@@ -72,12 +70,9 @@ export const NotificationsProvider: React.FC<{ children: ReactNode }> = ({ child
     saveNotifications([...notifications, newNotif]);
   };
 
-  const sendBulkPersonalNotification = (message: string) => {
-      // In a real app this would be a server-side operation
-      // Here we simulate it by adding a personal notification for every known user
-       try {
-            const usersJSON = localStorage.getItem('karma_users');
-            const allUsers: { identifier: string }[] = usersJSON ? JSON.parse(usersJSON) : [];
+  const sendBulkPersonalNotification = async (message: string) => {
+      try {
+            const allUsers = await api.fetchUsers();
             const newNotifications = allUsers.map(user => ({
                 id: `notif-${Date.now()}-${Math.random()}`,
                 type: 'personal' as const,
